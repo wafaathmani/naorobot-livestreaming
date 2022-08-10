@@ -1,0 +1,49 @@
+from flask import Flask, render_template, Response
+import cv2
+
+app = Flask(__name__)
+from naoqi import ALProxy
+IP="desktop-6363djg.local."
+from PIL import Image
+PORT=9559
+path = 'D:/' +  '/'
+camera = ALProxy("ALVideoDevice", IP, PORT)
+resolution = 2 # VGA (640*480px)
+colorSpace = 11 # RGB
+
+def pic(_name, CameraIndex):
+    videoClient = camera.subscribeCamera("python_client", CameraIndex, resolution, colorSpace, 5)
+    naoImage = camera.getImageRemote(videoClient)
+    camera.unsubscribe(videoClient)
+    # Get the image size and pixel array.
+    imageWidth = naoImage[0]
+    imageHeight = naoImage[1]
+    array = naoImage[6]
+    im = Image.frombytes("RGB", (imageWidth, imageHeight), str(array))
+    im.save(_name, "PNG")
+
+
+def generate_frames():
+    while True:
+        pic(path + 'f3.png', 0)
+        ## read the camera frame
+        frame = cv2.imread('D:/f3.png')
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame = buffer.tobytes()
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/video')
+def video():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
